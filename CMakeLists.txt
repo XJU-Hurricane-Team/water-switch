@@ -76,6 +76,7 @@ include_directories(
 add_definitions(
         -DSTM32F103xB
         -DUSE_HAL_DRIVER
+        -DUSE_FULL_LL_DRIVER
 )
 
 file(GLOB_RECURSE SOURCES
