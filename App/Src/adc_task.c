@@ -56,6 +56,12 @@ static threshold_t threshold_table[] = {
 #endif                                             /* MODE_CONF == PUMPING_MODE */
 };
 
+/**
+ * @brief ADC task. Reads water level via DMA, evaluates thresholds, and
+ *        controls pump/alert outputs accordingly.
+ *
+ * @param args Task arguments (unused).
+ */
 __NO_RETURN void adc_task(void *args)
 {
     UNUSED(args);
@@ -108,6 +114,12 @@ __NO_RETURN void adc_task(void *args)
     }
 }
 
+/**
+ * @brief ADC conversion complete callback. Gives the ADC semaphore from ISR
+ *        to signal that a new buffer of samples is ready.
+ *
+ * @param hadc ADC handle that triggered the callback.
+ */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     UNUSED(hadc);
@@ -144,6 +156,10 @@ typedef struct __packed {
     uint8_t crc8;         /* CRC8 value */
 } limit_data_t;
 
+/**
+ * @brief Read limit values from flash. If CRC validation fails, the limits
+ *        are reset to their default values and saved back to flash.
+ */
 static void adc_read_limit(void)
 {
     limit_data_t data;
@@ -164,6 +180,9 @@ static void adc_read_limit(void)
 #endif /* MODE_CONF == PUMPING_MODE */
 }
 
+/**
+ * @brief Save current limit values to flash with a CRC-8 checksum.
+ */
 void adc_save_limit(void)
 {
     limit_data_t data __ALIGNED(8);
@@ -190,6 +209,12 @@ void adc_save_limit(void)
     __enable_irq();
 }
 
+/**
+ * @brief Wait for the ADC DMA buffer to be filled, then compute the average
+ *        and convert it to a water level value.
+ *
+ * @return Current water level (inverted and scaled from raw ADC readings).
+ */
 static uint16_t adc_get_water_level(void)
 {
     xSemaphoreTake(adc_conv_cplt_sem, portMAX_DELAY);
@@ -203,6 +228,10 @@ static uint16_t adc_get_water_level(void)
     return (uint16_t)(WATER_MAX_LEVEL - total / ADC_BUF_SIZE);
 }
 
+/**
+ * @brief Handle sensor disconnect. Suspends the key task, saves pump state,
+ *        toggles the buzzer, and waits until the sensor reconnects.
+ */
 static void disconnect_alert(void)
 {
     /* change to more than threshold */
@@ -238,6 +267,16 @@ static void disconnect_alert(void)
     vTaskResume(key_task_handle);
 }
 
+/**
+ * @brief Stateful threshold check with debounce. Returns true only after the
+ *        value has been beyond the threshold continuously for the configured
+ *        duration.
+ *
+ * @param t     Pointer to the threshold descriptor.
+ * @param value Current measured value.
+ * @retval true  Threshold condition met and held for the required duration.
+ * @retval false Threshold condition not met or not yet held long enough.
+ */
 static bool threshold_update(threshold_t *t, uint16_t value)
 {
     uint32_t now = pdTICKS_TO_MS(xTaskGetTickCount());
@@ -267,6 +306,10 @@ static bool threshold_update(threshold_t *t, uint16_t value)
 
 #define DISPLAY_UPDATE_PERIOD_TICK 100
 
+/**
+ * @brief Periodically refresh the 7-segment display with the current water
+ *        level, at a fixed rate of DISPLAY_UPDATE_PERIOD_TICK ticks.
+ */
 static void display_update(void)
 {
     static TickType_t tick_start;

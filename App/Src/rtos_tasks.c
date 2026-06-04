@@ -47,6 +47,12 @@ static void start_task(void *args)
     vTaskDelay(portMAX_DELAY);
 }
 
+/**
+ * @brief Buzzer task. Waits on the beep semaphore and produces a short beep
+ *        (100 ms) each time the semaphore is given.
+ *
+ * @param args Task arguments (unused).
+ */
 __NO_RETURN static void beep_task(void *args)
 {
     while (1) {

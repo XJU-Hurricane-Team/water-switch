@@ -16,6 +16,12 @@ TaskHandle_t key_task_handle;
 
 static uint16_t adjust_limit(uint16_t current_num);
 
+/**
+ * @brief Key / encoder task. Waits for button and encoder events and
+ *        dispatches pump toggle or limit adjustment accordingly.
+ *
+ * @param args Task arguments (unused).
+ */
 __NO_RETURN void key_task(void *args)
 {
     UNUSED(args);
@@ -63,6 +69,15 @@ __NO_RETURN void key_task(void *args)
     }
 }
 
+/**
+ * @brief Digit-by-digit limit adjustment using the rotary encoder.
+ *        The user cycles through digit positions, adjusts each digit, and
+ *        confirms or cancels the new value.
+ *
+ * @param current_num Current limit value to start adjusting from.
+ * @return The new limit value (clamped to MIN/MAX water level), or 0 if
+ *         cancelled.
+ */
 static uint16_t adjust_limit(uint16_t current_num)
 {
     EventBits_t key_event_bits;
@@ -150,6 +165,12 @@ static uint16_t adjust_limit(uint16_t current_num)
     }
 }
 
+/**
+ * @brief GPIO external interrupt callback. Detects button and encoder key
+ *        presses with debounce and signals the key event group.
+ *
+ * @param GPIO_Pin Pin that triggered the interrupt.
+ */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     static uint32_t button_down_time;

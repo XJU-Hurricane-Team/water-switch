@@ -269,32 +269,51 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
 /* USER CODE BEGIN 1 */
 /* clang-format on */
 
+/**
+  * @brief  Starts the encoder timer and resets the counter to the midpoint.
+  */
 void encoder_start(void)
 {
     HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
     htim3.Instance->CNT = 0x7FFF;
 }
 
+/**
+  * @brief  Stops the encoder timer.
+  */
 void encoder_stop(void)
 {
     HAL_TIM_Encoder_Stop(&htim3, TIM_CHANNEL_ALL);
 }
 
+/**
+  * @brief  Gets the current encoder counter value.
+  * @retval Current 16-bit counter value.
+  */
 uint16_t encoder_get_count(void)
 {
     return __HAL_TIM_GET_COUNTER(&htim3);
 }
 
+/**
+  * @brief  Enables the beeper output by starting the PWM timer.
+  */
 void beep_on(void)
 {
     LL_TIM_EnableCounter(TIM1);
 }
 
+/**
+  * @brief  Disables the beeper output by stopping the PWM timer.
+  */
 void beep_off(void)
 {
     LL_TIM_DisableCounter(TIM1);
 }
 
+/**
+  * @brief  Toggles the beeper output state.
+  */
 void beep_toggle(void)
 {
     if (LL_TIM_IsEnabledCounter(TIM1)) {
@@ -304,3 +323,4 @@ void beep_toggle(void)
     }
 }
 /* USER CODE END 1 */
+
