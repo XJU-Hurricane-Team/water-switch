@@ -12,9 +12,6 @@ __MACOSX__
 .idea/
 cmake-build-*/
 
-# VS Code Settings
-.vscode/
-
 # Cursor Settings
 .cursor/
 
@@ -33,3 +30,13 @@ cmake-build-*/
 compile_commands.json
 build/
 obj/
+
+# backup file
+*.bak
+
+# STM32CubeIDE project file
+.cproject
+.mxproject
+.osx.project
+.project
+/MDK-ARM

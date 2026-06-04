@@ -103,6 +103,8 @@ int main(void)
   PUMP_OFF();
   LED_OFF();
   HAL_TIM_Base_Start_IT(&htim4);
+  LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH1);
+  LL_TIM_EnableAllOutputs(TIM1);
 
   extern void rtos_start(void);
   rtos_start();
