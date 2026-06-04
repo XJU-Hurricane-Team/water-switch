@@ -1,0 +1,277 @@
+/**
+ * Copyright (c) 2026, Deadline039
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include "includes.h"
+
+#define LIMIT_DATA_ADDRESS 0x08008000
+typedef enum {
+    THRESHOLD_LT, /** less than */
+    THRESHOLD_GT  /** more than */
+} threshold_type_t;
+
+typedef struct {
+    int16_t threshold;
+    threshold_type_t type;
+    uint32_t duration_ms;
+    uint32_t start_tick;
+    bool triggered;
+} threshold_t;
+
+#define ADC_BUF_SIZE 200
+
+static uint16_t adc_buf[ADC_BUF_SIZE];
+static uint16_t water_level;
+static SemaphoreHandle_t adc_conv_cplt_sem;
+bool g_stop_display_adc;
+
+static void display_update(void);
+static bool threshold_update(threshold_t *t, uint16_t value);
+static void adc_read_limit(void);
+static uint16_t adc_get_water_level(void);
+static void disconnect_alert(void);
+
+uint16_t g_upper_limit;
+#if MODE_CONF == PUMPING_MODE
+uint16_t g_lower_limit;
+#endif /* MODE_CONF == PUMPING_MODE */
+
+TaskHandle_t adc_task_handle;
+
+enum {
+    THRESHOLD_IDX_DISCONNECT = 0 /** disconnect threshold */,
+    THRESHOLD_IDX_UPPER, /** upper threshold */
+#if MODE_CONF == PUMPING_MODE
+    THRESHOLD_IDX_LOWER /** lower threshold */
+#endif                  /* MODE_CONF == PUMPING_MODE */
+};
+
+static threshold_t threshold_table[] = {
+    { .threshold = DISCONNECT_LIMIT, .type = THRESHOLD_LT, .duration_ms = 3000 }, /** disconnect threshold */
+    { .type = THRESHOLD_GT, .duration_ms = 2500 },                                /** upper threshold */
+#if MODE_CONF == PUMPING_MODE
+    { .type = THRESHOLD_LT, .duration_ms = 2500 }, /** lower threshold */
+#endif                                             /* MODE_CONF == PUMPING_MODE */
+};
+
+__NO_RETURN void adc_task(void *args)
+{
+    UNUSED(args);
+    adc_read_limit();
+
+    threshold_table[THRESHOLD_IDX_UPPER].threshold = g_upper_limit;
+#if MODE_CONF == PUMPING_MODE
+    threshold_table[THRESHOLD_IDX_LOWER].threshold = g_lower_limit;
+#endif /* MODE_CONF == PUMPING_MODE */
+
+    adc_conv_cplt_sem = xSemaphoreCreateBinary();
+
+    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_buf, ADC_BUF_SIZE);
+
+    while (1) {
+        water_level = adc_get_water_level();
+
+        if (g_stop_display_adc) {
+            continue;
+        }
+
+        if (threshold_update(&threshold_table[THRESHOLD_IDX_DISCONNECT], water_level)) {
+            /* reach the disconnect threshold */
+            disconnect_alert();
+        }
+
+#if MODE_CONF == PUMPING_MODE
+        if (threshold_update(&threshold_table[THRESHOLD_IDX_LOWER], water_level) && PUMP_IS_ON()) {
+            /* reach lower threshold, turn pump off */
+            PUMP_OFF();
+            LED_OFF();
+            xSemaphoreGive(beep_sem);
+        } else if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level) && !PUMP_IS_ON()) {
+            /* reach upper threshold, turn pump on */
+            PUMP_ON();
+            LED_ON();
+            xSemaphoreGive(beep_sem);
+        }
+#elif MODE_CONF == ALERT_MODE
+        if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level) & PUMP_IS_ON()) {
+            /* reach upper threshold, turn pump off */
+            PUMP_OFF();
+            LED_OFF();
+            /* let the buzzer sound continuously */
+            beep_on();
+        }
+#endif /* MODE_CONF */
+
+        display_update();
+    }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    UNUSED(hadc);
+    xSemaphoreGiveFromISR(adc_conv_cplt_sem, NULL);
+}
+
+/**
+ * @brief CRC-8 over @p len bytes.
+ *        Polynomial 0x07 (x⁸ + x² + x + 1), init 0x00, no final XOR.
+ * @param data data
+ * @param len len
+ */
+static uint8_t crc8_calc(const uint8_t *data, uint32_t len)
+{
+    uint8_t crc = 0x00;
+    while (len--) {
+        crc ^= *data++;
+        for (int i = 0; i < 8; i++) {
+            if (crc & 0x80) {
+                crc = (uint8_t)((crc << 1) ^ 0x07);
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+    return crc;
+}
+
+typedef struct __packed {
+    uint16_t upper_limit; /* upper limit */
+#if MODE_CONF == PUMPING_MODE
+    uint16_t lower_limit; /* lower limit */
+#endif                    /* MODE_CONF == PUMPING_MODE */
+    uint8_t crc8;         /* CRC8 value */
+} limit_data_t;
+
+static void adc_read_limit(void)
+{
+    limit_data_t data;
+    memcpy(&data, (const void *)LIMIT_DATA_ADDRESS, sizeof(data));
+
+    if (crc8_calc((const uint8_t *)&data, sizeof(data))) {
+        g_upper_limit = WATER_INIT_UPPER_LEVEL;
+#if MODE_CONF == PUMPING_MODE
+        g_lower_limit = WATER_INIT_LOWER_LEVEL;
+#endif /* MODE_CONF == PUMPING_MODE */
+        adc_save_limit();
+        return;
+    }
+
+    g_upper_limit = data.upper_limit;
+#if MODE_CONF == PUMPING_MODE
+    g_lower_limit = data.lower_limit;
+#endif /* MODE_CONF == PUMPING_MODE */
+}
+
+void adc_save_limit(void)
+{
+    limit_data_t data __ALIGNED(8);
+    FLASH_EraseInitTypeDef erase_init_struct;
+
+    data.upper_limit = g_upper_limit;
+#if MODE_CONF == PUMPING_MODE
+    data.lower_limit = g_lower_limit;
+#endif /* MODE_CONF == PUMPING_MODE */
+    data.crc8 = crc8_calc((const uint8_t *)&data, offsetof(limit_data_t, crc8));
+
+    uint32_t error_code;
+
+    __disable_irq();
+    HAL_FLASH_Unlock();
+    erase_init_struct.TypeErase = FLASH_TYPEERASE_PAGES;
+    erase_init_struct.NbPages = 1;
+    erase_init_struct.PageAddress = LIMIT_DATA_ADDRESS;
+    HAL_FLASHEx_Erase(&erase_init_struct, &error_code);
+
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, LIMIT_DATA_ADDRESS,
+                      *(uint64_t *)&data);
+    HAL_FLASH_Lock();
+    __enable_irq();
+}
+
+static uint16_t adc_get_water_level(void)
+{
+    xSemaphoreTake(adc_conv_cplt_sem, portMAX_DELAY);
+    uint32_t total = 0;
+    for (size_t i = 0; i < ADC_BUF_SIZE; i++) {
+        total += adc_buf[i];
+    }
+
+    /** Water level and ADC value are inversely proportional; 
+      * WATER_MAX_LEVEL minus ADC value is more intuitive. */
+    return (uint16_t)(WATER_MAX_LEVEL - total / ADC_BUF_SIZE);
+}
+
+static void disconnect_alert(void)
+{
+    /* change to more than threshold */
+    threshold_table[THRESHOLD_IDX_DISCONNECT].type = THRESHOLD_GT;
+    vTaskSuspend(key_task_handle);
+    uint32_t pump_last_status = PUMP_IS_ON();
+    PUMP_OFF();
+    LED_OFF();
+
+    TickType_t start_tick = xTaskGetTickCount();
+    while (1) {
+        water_level = adc_get_water_level();
+        if (threshold_update(&threshold_table[THRESHOLD_IDX_DISCONNECT], water_level)) {
+            beep_off();
+            break;
+        }
+        if (xTaskGetTickCount() - start_tick > 100) {
+            beep_toggle();
+            start_tick = xTaskGetTickCount();
+        }
+
+        display_update();
+    }
+
+    if (pump_last_status) {
+        PUMP_ON();
+    } else {
+        PUMP_OFF();
+    }
+    LED_UPDATE();
+    /* back to less than threshold */
+    threshold_table[THRESHOLD_IDX_DISCONNECT].type = THRESHOLD_LT;
+    vTaskResume(key_task_handle);
+}
+
+static bool threshold_update(threshold_t *t, uint16_t value)
+{
+    uint32_t now = pdTICKS_TO_MS(xTaskGetTickCount());
+    /* Does it meet the conditions? */
+    uint8_t cond = 0;
+
+    if (t->type == THRESHOLD_LT) {
+        cond = (value < t->threshold);
+    } else {
+        cond = (value > t->threshold);
+    }
+
+    if (cond) {
+        if (t->start_tick == 0) {
+            t->start_tick = now;
+        }
+
+        if ((t->triggered == false) && (now - t->start_tick >= t->duration_ms)) {
+            t->triggered = true;
+        }
+    } else {
+        t->start_tick = 0;
+        t->triggered = false;
+    }
+    return t->triggered;
+}
+
+#define DISPLAY_UPDATE_PERIOD_TICK 100
+
+static void display_update(void)
+{
+    static TickType_t tick_start;
+    if (xTaskGetTickCount() - tick_start >= DISPLAY_UPDATE_PERIOD_TICK) {
+        hc595_display_uint16(water_level);
+        tick_start = xTaskGetTickCount();
+    }
+}

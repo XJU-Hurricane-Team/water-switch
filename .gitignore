@@ -1,0 +1,35 @@
+# eclipse setting
+.settings
+
+# clangd cache directory files
+.cache
+
+# MacOS directory files
+.DS_Store
+__MACOSX__
+
+# Clion IDE CMake build & config
+.idea/
+cmake-build-*/
+
+# VS Code Settings
+.vscode/
+
+# Cursor Settings
+.cursor/
+
+# PlatformIO Settings
+.pio
+
+# JetBrains IDE settings
+.idea
+
+# build out
+*.elf
+*.hex
+*.lst
+*.bin
+*.map
+compile_commands.json
+build/
+obj/

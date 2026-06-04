@@ -1,0 +1,88 @@
+version: "4.1"
+name: WaterSwitch
+type: ARM
+deviceName: null
+packDir: null
+srcDirs:
+  - App/Src
+  - Bsp
+  - FreeRTOS
+  - STM32CubeMX
+virtualFolder:
+  name: <virtual_root>
+  files: []
+  folders: []
+dependenceList: []
+outDir: build
+miscInfo:
+  uid: 13f722e48f32bf44b7cf7a5c86b9a9d6
+targets:
+  Debug:
+    cppPreprocessAttrs:
+      defineList:
+        - USE_HAL_DRIVER
+        - STM32F103xB
+        - USE_FULL_LL_DRIVER
+      incList:
+        - App/Inc
+        - Bsp
+        - FreeRTOS/include
+        - FreeRTOS/portable/GCC/ARM_CM3
+        - STM32CubeMX/Core/Inc
+        - STM32CubeMX/Drivers/CMSIS/Include
+        - STM32CubeMX/Drivers/CMSIS/Device/ST/STM32F1xx/Include
+        - STM32CubeMX/Drivers/STM32F1xx_HAL_Driver/Inc
+      libList: []
+    excludeList: []
+    settings:
+      debugger: cortex-debug
+    toolchain: GCC
+    toolchainConfigMap:
+      GCC:
+        archExtensions: ""
+        cpuType: Cortex-M3
+        floatingPointHardware: none
+        options:
+          version: 5
+          afterBuildTasks: []
+          asm-compiler:
+            ASM_FLAGS: ""
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            CXX_FLAGS: ""
+            C_FLAGS: ""
+            language-c: c11
+            language-cpp: c++11
+            one-elf-section-per-data: true
+            one-elf-section-per-function: true
+            optimization: level-debug
+            warnings: all-warnings
+          global:
+            $float-abi-type: hard
+            misc-control: ""
+            not-use-syscalls: true
+            output-debug-info: enable
+            use-newlib-nano: true
+          linker:
+            $outputTaskExcludes:
+              - .bin
+            LD_FLAGS: ""
+            LIB_FLAGS: -lm
+            output-format: elf
+            remove-unused-input-sections: true
+        scatterFilePath: STM32CubeMX/STM32F103CBTX_FLASH.ld
+        storageLayout:
+          RAM: []
+          ROM: []
+        useCustomScatterFile: true
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: STM32F103CB
+          vendor: ST
+        otherCmds: ""
+        proType: 1
+        speed: 8000
+    uploader: JLink
