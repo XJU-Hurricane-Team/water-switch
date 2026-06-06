@@ -31,13 +31,16 @@ extern void adc_task(void *args);
 
 extern uint16_t g_upper_limit;
 
-/* sensor disconnect limit, which connect with 200k resistor */
-#define DISCONNECT_LIMIT       (120)
+#define SENSOR_CONNECT_ERROR_THRESHOLD (40)
+#define SENSOR_UP_RESISTOR_KR          (10)
+#define SENSOR_DOWN_RESISTOR_KR        (300)
 
-#define WATER_MAX_LEVEL        (4095)
-#define WATER_MIN_LEVEL        (DISCONNECT_LIMIT + 30)
+#define WATER_MAX_LEVEL                (4095)
+/* sensor disconnect limit. */
+#define DISCONNECT_LIMIT               (SENSOR_CONNECT_ERROR_THRESHOLD + (WATER_MAX_LEVEL * SENSOR_UP_RESISTOR_KR) / (SENSOR_UP_RESISTOR_KR + SENSOR_DOWN_RESISTOR_KR))
+#define WATER_MIN_LEVEL                (DISCONNECT_LIMIT + 30)
 
-#define WATER_INIT_UPPER_LEVEL (3800)
+#define WATER_INIT_UPPER_LEVEL         (3800)
 #if MODE_CONF == PUMPING_MODE
 extern uint16_t g_lower_limit;
 #define WATER_INIT_LOWER_LEVEL (300)
