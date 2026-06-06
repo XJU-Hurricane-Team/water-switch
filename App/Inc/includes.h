@@ -26,7 +26,7 @@
 #define MODE_CONF    PUMPING_MODE
 
 extern TaskHandle_t adc_task_handle;
-extern bool g_stop_display_adc;
+extern bool g_threshold_adj;
 extern void adc_task(void *args);
 
 extern uint16_t g_upper_limit;

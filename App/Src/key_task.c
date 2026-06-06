@@ -44,7 +44,7 @@ __NO_RETURN void key_task(void *args)
 #endif /* MODE_CONF == PUMPING_MODE */
 
             encoder_start();
-            g_stop_display_adc = true;
+            g_threshold_adj = true;
 
             new_limit = adjust_limit(g_upper_limit);
 
@@ -63,7 +63,7 @@ __NO_RETURN void key_task(void *args)
 #endif /* MODE_CONF == PUMPING_MODE */
 
             encoder_stop();
-            g_stop_display_adc = false;
+            g_threshold_adj = false;
             adc_save_limit();
         }
     }

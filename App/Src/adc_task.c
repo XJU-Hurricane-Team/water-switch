@@ -25,7 +25,7 @@ typedef struct {
 static uint16_t adc_buf[ADC_BUF_SIZE];
 static uint16_t water_level;
 static SemaphoreHandle_t adc_conv_cplt_sem;
-bool g_stop_display_adc;
+bool g_threshold_adj;
 
 static void display_update(void);
 static bool threshold_update(threshold_t *t, uint16_t value);
@@ -79,7 +79,9 @@ __NO_RETURN void adc_task(void *args)
     while (1) {
         water_level = adc_get_water_level();
 
-        if (g_stop_display_adc) {
+        if (g_threshold_adj) {
+            /* adjust the threshold, pause the detection, and don't block in this task. */
+            vTaskDelay(1);
             continue;
         }
 
