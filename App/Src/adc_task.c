@@ -91,19 +91,19 @@ __NO_RETURN void adc_task(void *args)
         }
 
 #if MODE_CONF == PUMPING_MODE
-        if (threshold_update(&threshold_table[THRESHOLD_IDX_LOWER], water_level) && PUMP_IS_ON()) {
+        if (threshold_update(&threshold_table[THRESHOLD_IDX_LOWER], water_level)) {
             /* reach lower threshold, turn pump off */
             PUMP_OFF();
             LED_OFF();
             xSemaphoreGive(beep_sem);
-        } else if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level) && !PUMP_IS_ON()) {
+        } else if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level)) {
             /* reach upper threshold, turn pump on */
             PUMP_ON();
             LED_ON();
             xSemaphoreGive(beep_sem);
         }
 #elif MODE_CONF == ALERT_MODE
-        if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level) & PUMP_IS_ON()) {
+        if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level)) {
             /* reach upper threshold, turn pump off */
             PUMP_OFF();
             LED_OFF();
@@ -298,12 +298,13 @@ static bool threshold_update(threshold_t *t, uint16_t value)
 
         if ((t->triggered == false) && (now - t->start_tick >= t->duration_ms)) {
             t->triggered = true;
+            return true;
         }
     } else {
         t->start_tick = 0;
         t->triggered = false;
     }
-    return t->triggered;
+    return false;
 }
 
 #define DISPLAY_UPDATE_PERIOD_TICK 100
