@@ -8,6 +8,10 @@
 
 #include <spi.h>
 
+/**
+ * Seven-segment display lookup table for hexadecimal digits (0-F), minus sign, and space.
+ * Each byte represents the segment pattern where each bit controls one LED segment.
+ */
 static const uint8_t digital_table[] = {
     0xC0, /* 0 */
     0xF9, /* 1 */
@@ -29,13 +33,32 @@ static const uint8_t digital_table[] = {
     0xFF, /*   */
 };
 
+/**
+ * Position/digit selection table for the 4-digit display.
+ * Each byte represents which digit position is active (low bit = active).
+ */
 static const uint8_t position_table[4] = { 0xF7, 0xFB, 0xFD, 0xFE };
 
+/**
+ * Buffer storing the display data for each of the 4 digit positions.
+ * Format: [position_bits << 8 | segment_bits]
+ */
 static uint16_t digital_data[4];
 
+/**
+ * Macros to control the Register Clock (RCLK) pin for HC595 latch.
+ * RCLK triggers the latch to transfer shift register data to output registers.
+ */
 #define HC595_RCLK_HIGH() (HC595_RCLK_GPIO_Port->BSRR = HC595_RCLK_Pin)
 #define HC595_RCLK_LOW()  (HC595_RCLK_GPIO_Port->BRR = HC595_RCLK_Pin)
 
+/**
+ * Display a single digit at the specified position on the 7-segment display.
+ *
+ * @param num       Character representing the digit ('0'-'9', 'a'-'f', '-', or ' ')
+ * @param position  Display position (0-3, left to right)
+ * @param show_dot  If true, enables the decimal point dot for this digit
+ */
 void hc595_display_num_pos(char num, uint8_t position, bool show_dot)
 {
     if (position >= 4) {
@@ -70,6 +93,12 @@ void hc595_display_num_pos(char num, uint8_t position, bool show_dot)
     digital_data[position] = (position_table[position] << 8) | digital_num;
 }
 
+/**
+ * Display a 16-bit unsigned integer on the 4-digit display.
+ * The number is displayed right-aligned (units place on the right).
+ *
+ * @param number    16-bit unsigned integer to display (0-9999)
+ */
 void hc595_display_uint16(uint16_t number)
 {
     uint16_t num = number;
@@ -79,6 +108,10 @@ void hc595_display_uint16(uint16_t number)
     }
 }
 
+/**
+ * Turn off all digits on the display by setting all segments to inactive (high).
+ *
+ */
 void hc595_display_off(void)
 {
     for (int i = 0; i < 4; i++) {
@@ -86,6 +119,13 @@ void hc595_display_off(void)
     }
 }
 
+/**
+ * Internal timer tick function for display scanning.
+ * This function is called periodically by the timer interrupt to cyclically
+ * update each of the 4 digit positions, creating a multiplexed display effect.
+ * Transmits the current digit data via SPI to the HC595 shift register and
+ * latches it using the RCLK pin.
+ */
 static void hc595_display_tick(void)
 {
     static uint32_t scan_idx;
@@ -101,6 +141,13 @@ static void hc595_display_tick(void)
     scan_idx %= 4;
 }
 
+/**
+ * HAL timer period elapsed callback handler.
+ * Called by the HAL driver when TIM4 period completes.
+ * Triggers the display scanning routine to update the current digit.
+ *
+ * @param htim      Pointer to the timer handle that triggered this callback
+ */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM4) {
