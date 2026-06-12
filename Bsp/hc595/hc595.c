@@ -8,9 +8,6 @@
 
 #include <spi.h>
 
-#include <FreeRTOS.h>
-#include <task.h>
-
 static const uint8_t digital_table[] = {
     0xC0, /* 0 */
     0xF9, /* 1 */
