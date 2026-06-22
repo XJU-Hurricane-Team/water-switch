@@ -81,7 +81,7 @@ add_definitions(
 
 file(GLOB_RECURSE SOURCES
         "STM32CubeMX/Core/Src/*.c"
-        "STM32CubeMX/Core/Startup/startup_stm32f103c8tx.s"
+        "STM32CubeMX/Core/Startup/startup_stm32f103cbtx.s"
 
         "STM32CubeMX/Drivers/Bsp/*.c"
         "STM32CubeMX/Drivers/STM32F1xx_HAL_Driver/Src/*.c"
