@@ -7,25 +7,34 @@
 #include "includes.h"
 
 #define LIMIT_DATA_ADDRESS 0x08008000
+
+/**
+ * @brief threshold condition
+ */
 typedef enum {
     THRESHOLD_LT, /** less than */
     THRESHOLD_GT  /** more than */
 } threshold_type_t;
 
+/**
+ * @brief threshold determination 
+ */
 typedef struct {
-    int16_t threshold;
-    threshold_type_t type;
-    uint32_t duration_ms;
-    uint32_t start_tick;
-    bool triggered;
+    int16_t threshold;     /** threshold value */
+    threshold_type_t type; /** threshold condition */
+    uint32_t duration_ms;  /** duration, unit: ms */
+    uint32_t start_tick;   /** first ticks to meet condition */
+    bool triggered;        /** is triggered */
 } threshold_t;
 
 #define ADC_BUF_SIZE 200
 
+/* adc buffer */
 static uint16_t adc_buf[ADC_BUF_SIZE];
+/* current water level */
 static uint16_t water_level;
+/* adc convert complete semaphore */
 static SemaphoreHandle_t adc_conv_cplt_sem;
-bool g_threshold_adj;
 
 static void display_update(void);
 static bool threshold_update(threshold_t *t, uint16_t value);
@@ -33,10 +42,10 @@ static void adc_read_limit(void);
 static uint16_t adc_get_water_level(void);
 static void disconnect_alert(void);
 
-uint16_t g_upper_limit;
+uint16_t g_upper_limit; /* upper threshold */
 #if MODE_CONF == PUMPING_MODE
-uint16_t g_lower_limit;
-#endif /* MODE_CONF == PUMPING_MODE */
+uint16_t g_lower_limit; /* lower threshold */
+#endif                  /* MODE_CONF == PUMPING_MODE */
 
 TaskHandle_t adc_task_handle;
 
@@ -67,7 +76,10 @@ __NO_RETURN void adc_task(void *args)
     UNUSED(args);
     adc_read_limit();
 
-    threshold_table[THRESHOLD_IDX_UPPER].threshold = g_upper_limit;
+    beep_data_t beep = { .times = 1, .on_period = 75, .off_period = 75 };
+
+    threshold_table[THRESHOLD_IDX_UPPER]
+        .threshold = g_upper_limit;
 #if MODE_CONF == PUMPING_MODE
     threshold_table[THRESHOLD_IDX_LOWER].threshold = g_lower_limit;
 #endif /* MODE_CONF == PUMPING_MODE */
@@ -79,12 +91,6 @@ __NO_RETURN void adc_task(void *args)
     while (1) {
         water_level = adc_get_water_level();
 
-        if (g_threshold_adj) {
-            /* adjust the threshold, pause the detection, and don't block in this task. */
-            vTaskDelay(1);
-            continue;
-        }
-
         if (threshold_update(&threshold_table[THRESHOLD_IDX_DISCONNECT], water_level)) {
             /* reach the disconnect threshold */
             disconnect_alert();
@@ -92,15 +98,19 @@ __NO_RETURN void adc_task(void *args)
 
 #if MODE_CONF == PUMPING_MODE
         if (threshold_update(&threshold_table[THRESHOLD_IDX_LOWER], water_level)) {
-            /* reach lower threshold, turn pump off */
+            /* reach lower threshold */
             PUMP_OFF();
             LED_OFF();
-            xSemaphoreGive(beep_sem);
+            /* beep two times */
+            beep.times = 2;
+            xQueueOverwrite(g_beep_queue, &beep);
         } else if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level)) {
-            /* reach upper threshold, turn pump on */
+            /* reach upper threshold */
             PUMP_ON();
             LED_ON();
-            xSemaphoreGive(beep_sem);
+            /* beep three times */
+            beep.times = 3;
+            xQueueOverwrite(g_beep_queue, &beep);
         }
 #elif MODE_CONF == ALERT_MODE
         if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level)) {

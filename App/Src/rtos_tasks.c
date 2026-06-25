@@ -6,7 +6,8 @@
 
 #include "includes.h"
 
-SemaphoreHandle_t beep_sem;
+QueueHandle_t g_beep_queue;
+
 static TaskHandle_t beep_task_handle;
 static void beep_task(void *args);
 
@@ -32,14 +33,17 @@ static void start_task(void *args)
 {
     UNUSED(args);
 
+    beep_data_t init_beep = { .times = 1, .on_period = 100, .off_period = 0 };
+
     taskENTER_CRITICAL();
-    beep_sem = xSemaphoreCreateBinary();
+    g_beep_queue = xQueueCreate(1, sizeof(beep_data_t));
     xTaskCreate(key_task, "key_task", 128, NULL, 3, &key_task_handle);
     xTaskCreate(adc_task, "adc_task", 128, NULL, 2, &adc_task_handle);
     xTaskCreate(beep_task, "beep_task", 128, NULL, 1, &beep_task_handle);
     taskEXIT_CRITICAL();
 
-    xSemaphoreGive(beep_sem);
+    xQueueOverwrite(g_beep_queue, &init_beep);
+
     PUMP_ON();
     LED_ON();
 
@@ -55,10 +59,17 @@ static void start_task(void *args)
  */
 __NO_RETURN static void beep_task(void *args)
 {
+    beep_data_t beep_data;
     while (1) {
-        xSemaphoreTake(beep_sem, portMAX_DELAY);
-        beep_on();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        beep_off();
+        if (xQueueReceive(g_beep_queue, &beep_data, portMAX_DELAY) != pdPASS) {
+            continue;
+        }
+
+        for (size_t i = 0; i < beep_data.times; i++) {
+            beep_on();
+            vTaskDelay(pdMS_TO_TICKS(beep_data.on_period));
+            beep_off();
+            vTaskDelay(pdMS_TO_TICKS(beep_data.off_period));
+        }
     }
 }

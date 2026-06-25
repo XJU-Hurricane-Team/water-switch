@@ -26,7 +26,6 @@
 #define MODE_CONF    PUMPING_MODE
 
 extern TaskHandle_t adc_task_handle;
-extern bool g_threshold_adj;
 extern void adc_task(void *args);
 
 extern uint16_t g_upper_limit;
@@ -51,4 +50,13 @@ extern void key_task(void *args);
 
 void adc_save_limit(void);
 
-extern SemaphoreHandle_t beep_sem;
+/**
+ * @brief beep data, for beep task.
+ */
+typedef struct {
+    uint8_t times;       /** beep times */
+    uint32_t on_period;  /** beep on period, unit: ms */
+    uint32_t off_period; /** beep off period, unit: ms */
+} beep_data_t;
+
+extern QueueHandle_t g_beep_queue;

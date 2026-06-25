@@ -38,13 +38,16 @@ __NO_RETURN void key_task(void *args)
             PUMP_TOGGLE();
         }
         if (key_event_bits & KEY_ENCODER) {
+            vTaskSuspend(adc_task_handle);
             uint16_t new_limit = 0;
 #if MODE_CONF == PUMPING_MODE
             uint16_t last_upper_limit = g_upper_limit;
 #endif /* MODE_CONF == PUMPING_MODE */
+            uint16_t last_pump_state = PUMP_IS_ON();
+            PUMP_OFF();
+            LED_OFF();
 
             encoder_start();
-            g_threshold_adj = true;
 
             new_limit = adjust_limit(g_upper_limit);
 
@@ -62,9 +65,14 @@ __NO_RETURN void key_task(void *args)
             }
 #endif /* MODE_CONF == PUMPING_MODE */
 
+            if (last_pump_state) {
+                PUMP_ON();
+                LED_ON();
+            }
+
             encoder_stop();
-            g_threshold_adj = false;
             adc_save_limit();
+            vTaskResume(adc_task_handle);
         }
     }
 }
@@ -175,17 +183,18 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     static uint32_t button_down_time;
     static uint32_t enc_key_down_time;
+    static beep_data_t beep = { .times = 1, .on_period = 100, .off_period = 0 };
 
     if (GPIO_Pin == BUTTON_Pin) {
         if (HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin) == GPIO_PIN_RESET) {
-            xSemaphoreGiveFromISR(beep_sem, NULL);
+            xQueueOverwriteFromISR(g_beep_queue, &beep, NULL);
             button_down_time = HAL_GetTick();
         } else if (HAL_GetTick() - button_down_time > PRESS_DURATION_MS) {
             xEventGroupSetBitsFromISR(key_event, KEY_BUTTON, NULL);
         }
     } else if (GPIO_Pin == ENC_KEY_Pin) {
         if (HAL_GPIO_ReadPin(ENC_KEY_GPIO_Port, ENC_KEY_Pin) == GPIO_PIN_RESET) {
-            xSemaphoreGiveFromISR(beep_sem, NULL);
+            xQueueOverwriteFromISR(g_beep_queue, &beep, NULL);
             enc_key_down_time = HAL_GetTick();
         } else if (HAL_GetTick() - enc_key_down_time > PRESS_DURATION_MS) {
             xEventGroupSetBitsFromISR(key_event, KEY_ENCODER, NULL);
