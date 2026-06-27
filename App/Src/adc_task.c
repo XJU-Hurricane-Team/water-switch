@@ -6,7 +6,10 @@
 
 #include "includes.h"
 
-#define LIMIT_DATA_ADDRESS 0x08008000
+#define LIMIT_DATA_ADDRESS         0x08008000
+#define ADC_BUF_SIZE               200
+#define ADC_CHANGE_THRESHOLD       100
+#define DISPLAY_UPDATE_PERIOD_TICK 200
 
 /**
  * @brief threshold condition
@@ -26,8 +29,6 @@ typedef struct {
     uint32_t start_tick;   /** first ticks to meet condition */
     bool triggered;        /** is triggered */
 } threshold_t;
-
-#define ADC_BUF_SIZE 200
 
 /* adc buffer */
 static uint16_t adc_buf[ADC_BUF_SIZE];
@@ -99,28 +100,36 @@ __NO_RETURN void adc_task(void *args)
 #if MODE_CONF == PUMPING_MODE
         if (threshold_update(&threshold_table[THRESHOLD_IDX_LOWER], water_level)) {
             /* reach lower threshold */
-            PUMP_OFF();
-            LED_OFF();
+            pump_on();
             /* beep two times */
             beep.times = 2;
             xQueueOverwrite(g_beep_queue, &beep);
         } else if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level)) {
             /* reach upper threshold */
-            PUMP_ON();
-            LED_ON();
+            pump_off();
             /* beep three times */
             beep.times = 3;
             xQueueOverwrite(g_beep_queue, &beep);
         }
+
 #elif MODE_CONF == ALERT_MODE
         if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level)) {
             /* reach upper threshold, turn pump off */
-            PUMP_OFF();
-            LED_OFF();
+            pump_off();
             /* let the buzzer sound continuously */
             beep_on();
         }
 #endif /* MODE_CONF */
+
+#if PUMP_ON_MAX_SECONDS
+        if (pump_is_on() && (HAL_GetTick() - g_pump_on_tick >= (PUMP_ON_MAX_SECONDS * 1000))) {
+            /* reach open max time, pump still on, maybe no water, turn it off */
+            pump_off();
+            /* beep four times */
+            beep.times = 4;
+            xQueueOverwrite(g_beep_queue, &beep);
+        }
+#endif /* PUMP_ON_MAX_SECONDS */
 
         display_update();
     }
@@ -258,9 +267,8 @@ static void disconnect_alert(void)
     /* change to more than threshold */
     threshold_table[THRESHOLD_IDX_DISCONNECT].type = THRESHOLD_GT;
     vTaskSuspend(key_task_handle);
-    uint32_t pump_last_status = PUMP_IS_ON();
-    PUMP_OFF();
-    LED_OFF();
+    uint32_t pump_last_status = pump_is_on();
+    pump_off();
 
     TickType_t start_tick = xTaskGetTickCount();
     while (1) {
@@ -278,11 +286,11 @@ static void disconnect_alert(void)
     }
 
     if (pump_last_status) {
-        PUMP_ON();
+        pump_on();
     } else {
-        PUMP_OFF();
+        pump_off();
     }
-    LED_UPDATE();
+
     /* back to less than threshold */
     threshold_table[THRESHOLD_IDX_DISCONNECT].type = THRESHOLD_LT;
     vTaskResume(key_task_handle);
@@ -325,8 +333,6 @@ static bool threshold_update(threshold_t *t, uint16_t value)
     }
     return false;
 }
-
-#define DISPLAY_UPDATE_PERIOD_TICK 100
 
 /**
  * @brief Periodically refresh the 7-segment display with the current water

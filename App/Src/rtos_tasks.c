@@ -44,8 +44,7 @@ static void start_task(void *args)
 
     xQueueOverwrite(g_beep_queue, &init_beep);
 
-    PUMP_ON();
-    LED_ON();
+    pump_on();
 
     vTaskDelete(start_task_handle);
     vTaskDelay(portMAX_DELAY);

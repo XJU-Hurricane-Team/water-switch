@@ -35,7 +35,7 @@ __NO_RETURN void key_task(void *args)
     while (1) {
         key_event_bits = xEventGroupWaitBits(key_event, KEY_BUTTON | KEY_ENCODER, pdTRUE, pdFALSE, portMAX_DELAY);
         if (key_event_bits & KEY_BUTTON) {
-            PUMP_TOGGLE();
+            pump_toggle();
         }
         if (key_event_bits & KEY_ENCODER) {
             vTaskSuspend(adc_task_handle);
@@ -43,9 +43,8 @@ __NO_RETURN void key_task(void *args)
 #if MODE_CONF == PUMPING_MODE
             uint16_t last_upper_limit = g_upper_limit;
 #endif /* MODE_CONF == PUMPING_MODE */
-            uint16_t last_pump_state = PUMP_IS_ON();
-            PUMP_OFF();
-            LED_OFF();
+            uint16_t last_pump_state = pump_is_on();
+            pump_off();
 
             encoder_start();
 
@@ -66,8 +65,7 @@ __NO_RETURN void key_task(void *args)
 #endif /* MODE_CONF == PUMPING_MODE */
 
             if (last_pump_state) {
-                PUMP_ON();
-                LED_ON();
+                pump_on();
             }
 
             encoder_stop();

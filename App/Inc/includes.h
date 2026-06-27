@@ -39,6 +39,8 @@ extern uint16_t g_upper_limit;
 #define DISCONNECT_LIMIT               (SENSOR_CONNECT_ERROR_THRESHOLD + (WATER_MAX_LEVEL * SENSOR_UP_RESISTOR_KR) / (SENSOR_UP_RESISTOR_KR + SENSOR_DOWN_RESISTOR_KR))
 #define WATER_MIN_LEVEL                (DISCONNECT_LIMIT + 30)
 
+#define PUMP_ON_MAX_SECONDS            (330)
+
 #define WATER_INIT_UPPER_LEVEL         (3800)
 #if MODE_CONF == PUMPING_MODE
 extern uint16_t g_lower_limit;
