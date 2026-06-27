@@ -231,13 +231,22 @@ static uint16_t adc_get_water_level(void)
 {
     xSemaphoreTake(adc_conv_cplt_sem, portMAX_DELAY);
     uint32_t total = 0;
+    static int32_t filtered = -1;
     for (size_t i = 0; i < ADC_BUF_SIZE; i++) {
         total += adc_buf[i];
     }
 
     /** Water level and ADC value are inversely proportional; 
       * WATER_MAX_LEVEL minus ADC value is more intuitive. */
-    return (uint16_t)(WATER_MAX_LEVEL - total / ADC_BUF_SIZE);
+
+    uint16_t average = (uint16_t)(total / ADC_BUF_SIZE);
+    if (filtered < 0) {
+        filtered = average;
+    } else {
+        filtered += (average - filtered) / 8;
+    }
+
+    return WATER_MAX_LEVEL - filtered;
 }
 
 /**
