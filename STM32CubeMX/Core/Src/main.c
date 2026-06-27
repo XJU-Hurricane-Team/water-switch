@@ -100,8 +100,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   beep_init();
   beep_off();
-  PUMP_OFF();
-  LED_OFF();
+  pump_off();
   HAL_TIM_Base_Start_IT(&htim4);
   LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH1);
   LL_TIM_EnableAllOutputs(TIM1);

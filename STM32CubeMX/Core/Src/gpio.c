@@ -99,4 +99,50 @@ void beep_init(void)
     HAL_GPIO_Init(Beep_GPIO_Port, &beep_gpio);
 }
 #endif /* BEEP_USE_NO_SOURCE == 0*/
+
+/* pump on ticks */
+uint32_t g_pump_on_tick;
+
+/**
+ * @brief turn on pump
+ */
+void pump_on(void)
+{
+    PUMP_GPIO_Port->BRR = PUMP_Pin;
+    g_pump_on_tick = HAL_GetTick();
+    LED_ON();
+}
+
+/**
+ * @brief turn off pump
+ */
+void pump_off(void)
+{
+    PUMP_GPIO_Port->BSRR = PUMP_Pin;
+    LED_OFF();
+}
+
+/**
+ * @brief get pump status
+ * @return pump is on
+ */
+uint32_t pump_is_on(void)
+{
+    return HAL_GPIO_ReadPin(PUMP_GPIO_Port, PUMP_Pin) == GPIO_PIN_RESET ? 1U : 0U;
+}
+
+/**
+ * @brief toggle pump status
+ */
+void pump_toggle(void)
+{
+    HAL_GPIO_TogglePin(PUMP_GPIO_Port, PUMP_Pin);
+    if (pump_is_on()) {
+        g_pump_on_tick = HAL_GetTick();
+        LED_ON();
+    } else {
+        LED_OFF();
+    }
+}
+
 /* USER CODE END 2 */

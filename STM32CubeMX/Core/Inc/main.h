@@ -113,25 +113,6 @@ void beep_init(void);
 #define beep_toggle() HAL_GPIO_TogglePin(Beep_GPIO_Port, Beep_Pin)
 #endif /* BEEP_USE_NO_SOURCE */
 
-#define LED_ON()     (LED_GPIO_Port->BRR = LED_Pin)
-#define LED_OFF()    (LED_GPIO_Port->BSRR = LED_Pin)
-#define LED_UPDATE() (PUMP_IS_ON() ? LED_ON() : LED_OFF())
-
-#define PUMP_ON()    (PUMP_GPIO_Port->BRR = PUMP_Pin)
-#define PUMP_OFF()   (PUMP_GPIO_Port->BSRR = PUMP_Pin);
-#define PUMP_IS_ON() (HAL_GPIO_ReadPin(PUMP_GPIO_Port, PUMP_Pin) == GPIO_PIN_RESET ? 1U : 0U)
-#define PUMP_TOGGLE()                                 \
-    do {                                              \
-        HAL_GPIO_TogglePin(PUMP_GPIO_Port, PUMP_Pin); \
-        LED_UPDATE();                                 \
-    } while (0)
-
-#define BUTTON_IRQ_ENABLE()   HAL_NVIC_EnableIRQ(EXTI3_IRQn)
-#define BUTTON_IRQ_DISABLE()  HAL_NVIC_DisableIRQ(EXTI3_IRQn)
-
-#define ENC_KEY_IRQ_ENABLE()  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn)
-#define ENC_KEY_IRQ_DISABLE() HAL_NVIC_DisableIRQ(EXTI15_10_IRQn)
-
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
