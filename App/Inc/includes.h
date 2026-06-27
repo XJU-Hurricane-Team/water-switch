@@ -18,8 +18,8 @@
 
 /** alert and stop pump when water is more than limit */
 #define ALERT_MODE   1
-/** auto start that water is more than upper limit, 
- *  and stop when it less than lower limit */
+/** auto on/off that water is more than upper limit, 
+ *  and off/on when it less than lower limit */
 #define PUMPING_MODE 2
 
 // #define MODE_CONF    ALERT_MODE
@@ -27,8 +27,6 @@
 
 extern TaskHandle_t adc_task_handle;
 extern void adc_task(void *args);
-
-extern uint16_t g_upper_limit;
 
 #define SENSOR_CONNECT_ERROR_THRESHOLD (40)
 #define SENSOR_UP_RESISTOR_KR          (10)
@@ -38,14 +36,20 @@ extern uint16_t g_upper_limit;
 /* sensor disconnect limit. */
 #define DISCONNECT_LIMIT               (SENSOR_CONNECT_ERROR_THRESHOLD + (WATER_MAX_LEVEL * SENSOR_UP_RESISTOR_KR) / (SENSOR_UP_RESISTOR_KR + SENSOR_DOWN_RESISTOR_KR))
 #define WATER_MIN_LEVEL                (DISCONNECT_LIMIT + 30)
-
-#define PUMP_ON_MAX_SECONDS            (330)
-
 #define WATER_INIT_UPPER_LEVEL         (3800)
+#define WATER_INIT_LOWER_LEVEL         (300)
+#define ON_MAX_TIME_INIT_SEC           (330)
+
+typedef struct __packed {
+    uint16_t upper_limit; /* upper limit */
 #if MODE_CONF == PUMPING_MODE
-extern uint16_t g_lower_limit;
-#define WATER_INIT_LOWER_LEVEL (300)
-#endif /* MODE_CONF == PUMPING_MODE */
+    uint16_t lower_limit;     /* lower limit */
+#endif                        /* MODE_CONF == PUMPING_MODE */
+    uint16_t on_max_time_sec; /* turn on max time, unit: second */
+    uint8_t crc8;             /* CRC8 value */
+} limit_data_t;
+
+extern limit_data_t g_limit_data;
 
 extern TaskHandle_t key_task_handle;
 extern void key_task(void *args);

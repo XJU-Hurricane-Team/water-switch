@@ -7,6 +7,7 @@
 #include "hc595.h"
 
 #include <spi.h>
+#include <string.h>
 
 /**
  * Seven-segment display lookup table for hexadecimal digits (0-F), minus sign, and space.
@@ -24,12 +25,19 @@ static const uint8_t digital_table[] = {
     0x80, /* 8 */
     0x90, /* 9 */
     0x88, /* A */
-    0x83, /* B */
+    0x83, /* b */
     0xC6, /* C */
-    0xA1, /* D */
+    0xA1, /* d */
     0x86, /* E */
     0x8E, /* F */
-    0xbf, /* - */
+    0xAF, /* r */
+    0xC1, /* U */
+    0xE3, /* u */
+    0x8C, /* P */
+    0xA3, /* o */
+    0xC8, /* N */
+    0xAB, /* n */
+    0xBF, /* - */
     0xFF, /*   */
 };
 
@@ -55,11 +63,11 @@ static uint16_t digital_data[4];
 /**
  * Display a single digit at the specified position on the 7-segment display.
  *
- * @param num       Character representing the digit ('0'-'9', 'a'-'f', '-', or ' ')
+ * @param ch       Character representing the digit ('0'-'9', 'a'-'f', '-', or ' ')
  * @param position  Display position (0-3, left to right)
  * @param show_dot  If true, enables the decimal point dot for this digit
  */
-void hc595_display_num_pos(char num, uint8_t position, bool show_dot)
+void hc595_display_num_pos(char ch, uint8_t position, bool show_dot)
 {
     if (position >= 4) {
         return;
@@ -67,30 +75,73 @@ void hc595_display_num_pos(char num, uint8_t position, bool show_dot)
 
     uint8_t digital_num;
 
-    switch (num) {
+    switch (ch) {
         case '0' ... '9':
-            digital_num = digital_table[num - '0'];
+            digital_num = digital_table[ch - '0'];
             break;
 
         case 'a' ... 'f':
-            digital_num = digital_table[num - 'a' + 10];
+            digital_num = digital_table[ch - 'a' + 10];
             break;
 
-        case '-':
+        case 'A' ... 'F':
+            digital_num = digital_table[ch - 'A' + 10];
+            break;
+
+        case 'r':
+        case 'R':
             digital_num = digital_table[16];
             break;
 
-        case ' ':
+        case 'U':
             digital_num = digital_table[17];
             break;
 
+        case 'u':
+            digital_num = digital_table[18];
+            break;
+
+        case 'p':
+        case 'P':
+            digital_num = digital_table[19];
+            break;
+
+        case 'o':
+        case 'O':
+            digital_num = digital_table[20];
+            break;
+
+        case 'N':
+            digital_num = digital_table[21];
+            break;
+
+        case 'n':
+            digital_num = digital_table[22];
+            break;
+
+        case '-':
+            digital_num = digital_table[23];
+            break;
+
+        case ' ':
         default:
-            return;
+            digital_num = digital_table[24];
+            break;
     }
     if (show_dot == true) {
         digital_num &= ~(1 << 7);
     }
     digital_data[position] = (position_table[position] << 8) | digital_num;
+}
+
+/**
+ * Turn off all digits on the display by setting all segments to inactive (high).
+ */
+void hc595_display_off(void)
+{
+    for (int i = 0; i < 4; i++) {
+        digital_data[i] = (position_table[i] << 8) | 0xFF;
+    }
 }
 
 /**
@@ -109,13 +160,35 @@ void hc595_display_uint16(uint16_t number)
 }
 
 /**
- * Turn off all digits on the display by setting all segments to inactive (high).
+ * @brief Write a right-aligned string to the 7-segment display buffer.
+ *        A trailing '.' after a character enables the decimal-point dot for
+ *        that digit (e.g. "Err."). Excess characters are silently discarded;
+ *        unused leading positions are padded with spaces.
  *
+ * @param str Null-terminated string to display (max 4 visible characters).
  */
-void hc595_display_off(void)
+void hc595_display_str(const char *str)
 {
-    for (int i = 0; i < 4; i++) {
-        digital_data[i] = (position_table[i] << 8) | 0xFF;
+    size_t len = strlen(str);
+    uint32_t idx = 0;
+    int pos = 3;
+    while (idx < len) {
+        if (str[idx + 1] == '.') {
+            hc595_display_num_pos(str[idx], pos, true);
+            idx++;
+            pos--;
+        } else {
+            hc595_display_num_pos(str[idx], pos, false);
+            pos--;
+        }
+        if (pos < 0) {
+            return;
+        }
+        idx++;
+    }
+
+    for (; pos >= 0; pos--) {
+        hc595_display_num_pos(' ', pos, false);
     }
 }
 

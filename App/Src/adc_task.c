@@ -11,6 +11,8 @@
 #define ADC_CHANGE_THRESHOLD       100
 #define DISPLAY_UPDATE_PERIOD_TICK 200
 
+limit_data_t g_limit_data __ALIGNED(8);
+
 /**
  * @brief threshold condition
  */
@@ -39,14 +41,9 @@ static SemaphoreHandle_t adc_conv_cplt_sem;
 
 static void display_update(void);
 static bool threshold_update(threshold_t *t, uint16_t value);
-static void adc_read_limit(void);
+void adc_read_limit(void);
 static uint16_t adc_get_water_level(void);
 static void disconnect_alert(void);
-
-uint16_t g_upper_limit; /* upper threshold */
-#if MODE_CONF == PUMPING_MODE
-uint16_t g_lower_limit; /* lower threshold */
-#endif                  /* MODE_CONF == PUMPING_MODE */
 
 TaskHandle_t adc_task_handle;
 
@@ -78,12 +75,6 @@ __NO_RETURN void adc_task(void *args)
     adc_read_limit();
 
     beep_data_t beep = { .times = 1, .on_period = 75, .off_period = 75 };
-
-    threshold_table[THRESHOLD_IDX_UPPER]
-        .threshold = g_upper_limit;
-#if MODE_CONF == PUMPING_MODE
-    threshold_table[THRESHOLD_IDX_LOWER].threshold = g_lower_limit;
-#endif /* MODE_CONF == PUMPING_MODE */
 
     adc_conv_cplt_sem = xSemaphoreCreateBinary();
 
@@ -121,15 +112,15 @@ __NO_RETURN void adc_task(void *args)
         }
 #endif /* MODE_CONF */
 
-#if PUMP_ON_MAX_SECONDS
-        if (pump_is_on() && (HAL_GetTick() - g_pump_on_tick >= (PUMP_ON_MAX_SECONDS * 1000))) {
+        if (pump_is_on() &&
+            g_limit_data.on_max_time_sec &&
+            (HAL_GetTick() - g_pump_on_tick >= ((uint32_t)g_limit_data.on_max_time_sec * 1000))) {
             /* reach open max time, pump still on, maybe no water, turn it off */
             pump_off();
             /* beep four times */
             beep.times = 4;
             xQueueOverwrite(g_beep_queue, &beep);
         }
-#endif /* PUMP_ON_MAX_SECONDS */
 
         display_update();
     }
@@ -150,8 +141,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 /**
  * @brief CRC-8 over @p len bytes.
  *        Polynomial 0x07 (x⁸ + x² + x + 1), init 0x00, no final XOR.
- * @param data data
- * @param len len
+ *
+ * @param data Pointer to the byte buffer to compute CRC-8 over.
+ * @param len  Number of bytes to process.
+ * @return 8-bit CRC checksum.
  */
 static uint8_t crc8_calc(const uint8_t *data, uint32_t len)
 {
@@ -169,35 +162,27 @@ static uint8_t crc8_calc(const uint8_t *data, uint32_t len)
     return crc;
 }
 
-typedef struct __packed {
-    uint16_t upper_limit; /* upper limit */
-#if MODE_CONF == PUMPING_MODE
-    uint16_t lower_limit; /* lower limit */
-#endif                    /* MODE_CONF == PUMPING_MODE */
-    uint8_t crc8;         /* CRC8 value */
-} limit_data_t;
-
 /**
  * @brief Read limit values from flash. If CRC validation fails, the limits
  *        are reset to their default values and saved back to flash.
  */
-static void adc_read_limit(void)
+void adc_read_limit(void)
 {
-    limit_data_t data;
-    memcpy(&data, (const void *)LIMIT_DATA_ADDRESS, sizeof(data));
+    memcpy(&g_limit_data, (const void *)LIMIT_DATA_ADDRESS, sizeof(g_limit_data));
 
-    if (crc8_calc((const uint8_t *)&data, sizeof(data))) {
-        g_upper_limit = WATER_INIT_UPPER_LEVEL;
+    if (crc8_calc((const uint8_t *)&g_limit_data, sizeof(g_limit_data))) {
+        g_limit_data.on_max_time_sec = ON_MAX_TIME_INIT_SEC;
+        g_limit_data.upper_limit = WATER_INIT_UPPER_LEVEL;
 #if MODE_CONF == PUMPING_MODE
-        g_lower_limit = WATER_INIT_LOWER_LEVEL;
+        g_limit_data.lower_limit = WATER_INIT_LOWER_LEVEL;
 #endif /* MODE_CONF == PUMPING_MODE */
         adc_save_limit();
-        return;
+        memcpy(&g_limit_data, (const void *)LIMIT_DATA_ADDRESS, sizeof(g_limit_data));
     }
 
-    g_upper_limit = data.upper_limit;
+    threshold_table[THRESHOLD_IDX_UPPER].threshold = g_limit_data.upper_limit;
 #if MODE_CONF == PUMPING_MODE
-    g_lower_limit = data.lower_limit;
+    threshold_table[THRESHOLD_IDX_LOWER].threshold = g_limit_data.lower_limit;
 #endif /* MODE_CONF == PUMPING_MODE */
 }
 
@@ -206,14 +191,9 @@ static void adc_read_limit(void)
  */
 void adc_save_limit(void)
 {
-    limit_data_t data __ALIGNED(8);
     FLASH_EraseInitTypeDef erase_init_struct;
 
-    data.upper_limit = g_upper_limit;
-#if MODE_CONF == PUMPING_MODE
-    data.lower_limit = g_lower_limit;
-#endif /* MODE_CONF == PUMPING_MODE */
-    data.crc8 = crc8_calc((const uint8_t *)&data, offsetof(limit_data_t, crc8));
+    g_limit_data.crc8 = crc8_calc((const uint8_t *)&g_limit_data, offsetof(limit_data_t, crc8));
 
     uint32_t error_code;
 
@@ -225,9 +205,14 @@ void adc_save_limit(void)
     HAL_FLASHEx_Erase(&erase_init_struct, &error_code);
 
     HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, LIMIT_DATA_ADDRESS,
-                      *(uint64_t *)&data);
+                      *(uint64_t *)&g_limit_data);
     HAL_FLASH_Lock();
     __enable_irq();
+
+    threshold_table[THRESHOLD_IDX_UPPER].threshold = g_limit_data.upper_limit;
+#if MODE_CONF == PUMPING_MODE
+    threshold_table[THRESHOLD_IDX_LOWER].threshold = g_limit_data.lower_limit;
+#endif /* MODE_CONF == PUMPING_MODE */
 }
 
 /**
@@ -270,19 +255,34 @@ static void disconnect_alert(void)
     uint32_t pump_last_status = pump_is_on();
     pump_off();
 
-    TickType_t start_tick = xTaskGetTickCount();
+    TickType_t now_tick = xTaskGetTickCount();
+
+    TickType_t display_tick = now_tick;
+    TickType_t beep_tick = now_tick;
+
     while (1) {
         water_level = adc_get_water_level();
         if (threshold_update(&threshold_table[THRESHOLD_IDX_DISCONNECT], water_level)) {
             beep_off();
             break;
         }
-        if (xTaskGetTickCount() - start_tick > 100) {
+        now_tick = xTaskGetTickCount();
+
+        if (now_tick - beep_tick > pdMS_TO_TICKS(100)) {
             beep_toggle();
-            start_tick = xTaskGetTickCount();
+            beep_tick = now_tick;
         }
 
-        display_update();
+        if (now_tick - display_tick < pdMS_TO_TICKS(1000)) {
+            /* display err in 1 second */
+            hc595_display_str(" Err");
+        } else if (now_tick - display_tick < pdMS_TO_TICKS(3000)) {
+            /* display number in 2 second */
+            display_update();
+        } else {
+            /* restart tick count */
+            display_tick = now_tick;
+        }
     }
 
     if (pump_last_status) {
@@ -340,9 +340,9 @@ static bool threshold_update(threshold_t *t, uint16_t value)
  */
 static void display_update(void)
 {
-    static TickType_t tick_start;
-    if (xTaskGetTickCount() - tick_start >= DISPLAY_UPDATE_PERIOD_TICK) {
+    static TickType_t last_display_tick;
+    if (xTaskGetTickCount() - last_display_tick >= DISPLAY_UPDATE_PERIOD_TICK) {
         hc595_display_uint16(water_level);
-        tick_start = xTaskGetTickCount();
+        last_display_tick = xTaskGetTickCount();
     }
 }
