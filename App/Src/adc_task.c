@@ -91,13 +91,13 @@ __NO_RETURN void adc_task(void *args)
 #if MODE_CONF == PUMPING_MODE
         if (threshold_update(&threshold_table[THRESHOLD_IDX_LOWER], water_level)) {
             /* reach lower threshold */
-            pump_on();
+            pump_off();
             /* beep two times */
             beep.times = 2;
             xQueueOverwrite(g_beep_queue, &beep);
         } else if (threshold_update(&threshold_table[THRESHOLD_IDX_UPPER], water_level)) {
             /* reach upper threshold */
-            pump_off();
+            pump_on();
             /* beep three times */
             beep.times = 3;
             xQueueOverwrite(g_beep_queue, &beep);
